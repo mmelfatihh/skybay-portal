@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { 
   Film, 
@@ -20,7 +20,8 @@ import {
   Sliders,
   AlertCircle,
   CupSoda,
-  TrendingUp
+  TrendingUp,
+  UserX
 } from "lucide-react";
 
 interface JobItem {
@@ -136,7 +137,6 @@ export default function ExperienceDrivenPortal() {
   const sliderRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
 
-  // Real-time listener: Tracks global entries instantly from any device across Firestore
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 1024);
@@ -144,10 +144,8 @@ export default function ExperienceDrivenPortal() {
     handleResize();
     window.addEventListener("resize", handleResize);
 
-    // Formulate a structured database query sorting entries dynamically by real-time timestamps
     const q = query(collection(db, "candidates"), orderBy("createdAt", "desc"));
     
-    // Subscribe natively to Cloud updates
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const dataNodes = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -204,22 +202,26 @@ export default function ExperienceDrivenPortal() {
 
       const aiData = await apiResponse.json();
 
-      // Write the complete evaluation block directly to Firebase cloud storage stream pipelines
+      if (apiResponse.status !== 200) {
+        throw new Error(aiData.details || "Failed executing active AI parsing pipeline layout.");
+      }
+
       await addDoc(collection(db, "candidates"), {
         name: applicantName,
         email: applicantEmail,
         targetJob: selectedJob.title,
-        matchScore: aiData.matchScore || Math.floor(Math.random() * 15) + 82,
-        aiBrief: aiData.aiBrief || "Dossier parsing completed.",
-        pros: aiData.pros || ["Acquired qualifications"],
-        cons: aiData.cons || ["Verification check pending"],
+        matchScore: aiData.matchScore,
+        aiBrief: aiData.aiBrief,
+        pros: aiData.pros,
+        cons: aiData.cons,
         status: "pending",
         createdAt: Date.now()
       });
 
       setIsSubmitted(true);
     } catch (err) {
-      console.error("Failed executing production route file sync:", err);
+      console.error("Production route evaluation runtime break:", err);
+      alert("AI Processing Error: Double check your local network tokens or terminal log files.");
     } finally {
       setIsSubmitting(false);
     }
@@ -227,7 +229,6 @@ export default function ExperienceDrivenPortal() {
 
   const handleAcceptCandidate = async (id: string) => {
     try {
-      // Sync candidate acceptance state instantly across all listening connected client terminals
       const docRef = doc(db, "candidates", id);
       await updateDoc(docRef, { status: "accepted" });
       
@@ -236,6 +237,16 @@ export default function ExperienceDrivenPortal() {
       }
     } catch (err) {
       console.error("Failed executing cloud authorization status update:", err);
+    }
+  };
+
+  const handleDeclineCandidate = async (id: string) => {
+    try {
+      const docRef = doc(db, "candidates", id);
+      await deleteDoc(docRef);
+      setSelectedCandidate(null);
+    } catch (err) {
+      console.error("Failed executing direct firestore document purge sequence:", err);
     }
   };
 
@@ -326,7 +337,7 @@ export default function ExperienceDrivenPortal() {
         </button>
       </header>
 
-      {/* Main Content Viewport */}
+      {/* Main Grid Container Content Frame */}
       <div className="w-full flex-grow z-10 block lg:flex lg:flex-col lg:overflow-hidden my-4 lg:my-0 pb-12 lg:pb-0">
         <AnimatePresence mode="wait">
           {!isAdminMode ? (
@@ -490,14 +501,25 @@ export default function ExperienceDrivenPortal() {
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-4 border-t border-purple-50 flex justify-end w-full">
+                    {/* FIXED CONTROL ROW: Features a dual grid layout adding a Decline pipeline action parameter */}
+                    <div className="mt-4 pt-4 border-t border-purple-50 grid grid-cols-2 gap-4 w-full">
+                      <button 
+                        onClick={() => handleDeclineCandidate(selectedCandidate.id)} 
+                        className="w-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-mono font-bold py-3.5 rounded-xl flex items-center justify-center space-x-2 transition-all active:scale-95 hover:bg-rose-100"
+                      >
+                        <UserX className="w-4 h-4" /> <span>DECLINE APPLICATION</span>
+                      </button>
+
                       {selectedCandidate.status === "accepted" ? (
                         <div className="w-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-mono font-bold py-3.5 rounded-xl flex items-center justify-center space-x-2">
-                          <UserCheck className="w-4 h-4" /> <span>OPERATOR AUTHORIZED</span>
+                          <UserCheck className="w-4 h-4" /> <span>AUTHORIZED</span>
                         </div>
                       ) : (
-                        <button onClick={() => handleAcceptCandidate(selectedCandidate.id)} className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-mono font-bold rounded-xl transition-all shadow-md">
-                          AUTHORIZE OPERATOR APPOINTMENT
+                        <button 
+                          onClick={() => handleAcceptCandidate(selectedCandidate.id)} 
+                          className="w-full bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-mono font-bold rounded-xl transition-all shadow-md active:scale-95"
+                        >
+                          AUTHORIZE APPOINTMENT
                         </button>
                       )}
                     </div>
@@ -536,7 +558,7 @@ export default function ExperienceDrivenPortal() {
         )}
       </AnimatePresence>
 
-      {/* Drawer Terminal Sheet Panel */}
+      {/* Slideout Panel */}
       <AnimatePresence>
         {selectedJob && (
           <>
