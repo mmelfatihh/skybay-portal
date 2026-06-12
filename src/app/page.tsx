@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { 
   Film, 
   UploadCloud, 
@@ -128,12 +130,13 @@ export default function ExperienceDrivenPortal() {
   const [applicantEmail, setApplicantEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [, setHoveredCard] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   
   const sliderRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
 
-  // 1. Safe window calculation & LocalStorage hydration check on mount
+  // Real-time listener: Tracks global entries instantly from any device across Firestore
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 1024);
@@ -141,17 +144,22 @@ export default function ExperienceDrivenPortal() {
     handleResize();
     window.addEventListener("resize", handleResize);
 
-    // Pull previously saved candidate sequences from browser storage memory
-    const cachedDossiers = localStorage.getItem("skybay_dossiers");
-    if (cachedDossiers) {
-      try {
-        setCandidates(JSON.parse(cachedDossiers));
-      } catch (e) {
-        console.error("Failed to parse cached database tracking nodes", e);
-      }
-    }
+    // Formulate a structured database query sorting entries dynamically by real-time timestamps
+    const q = query(collection(db, "candidates"), orderBy("createdAt", "desc"));
+    
+    // Subscribe natively to Cloud updates
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dataNodes = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Candidate[];
+      setCandidates(dataNodes);
+    });
 
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      unsubscribe();
+    };
   }, []);
 
   const handleJobSelect = (job: JobItem) => {
@@ -196,8 +204,8 @@ export default function ExperienceDrivenPortal() {
 
       const aiData = await apiResponse.json();
 
-      const newCandidate: Candidate = {
-        id: `cand-${Date.now()}`,
+      // Write the complete evaluation block directly to Firebase cloud storage stream pipelines
+      await addDoc(collection(db, "candidates"), {
         name: applicantName,
         email: applicantEmail,
         targetJob: selectedJob.title,
@@ -205,15 +213,10 @@ export default function ExperienceDrivenPortal() {
         aiBrief: aiData.aiBrief || "Dossier parsing completed.",
         pros: aiData.pros || ["Acquired qualifications"],
         cons: aiData.cons || ["Verification check pending"],
-        status: "pending"
-      };
+        status: "pending",
+        createdAt: Date.now()
+      });
 
-      const updatedList = [newCandidate, ...candidates];
-      setCandidates(updatedList);
-      
-      // Save data string into browser LocalStorage immediately
-      localStorage.setItem("skybay_dossiers", JSON.stringify(updatedList));
-      
       setIsSubmitted(true);
     } catch (err) {
       console.error("Failed executing production route file sync:", err);
@@ -222,13 +225,17 @@ export default function ExperienceDrivenPortal() {
     }
   };
 
-  const handleAcceptCandidate = (id: string) => {
-    const updated = candidates.map(c => c.id === id ? { ...c, status: "accepted" as const } : c);
-    setCandidates(updated);
-    localStorage.setItem("skybay_dossiers", JSON.stringify(updated));
-    
-    if (selectedCandidate && selectedCandidate.id === id) {
-      setSelectedCandidate({ ...selectedCandidate, status: "accepted" });
+  const handleAcceptCandidate = async (id: string) => {
+    try {
+      // Sync candidate acceptance state instantly across all listening connected client terminals
+      const docRef = doc(db, "candidates", id);
+      await updateDoc(docRef, { status: "accepted" });
+      
+      if (selectedCandidate && selectedCandidate.id === id) {
+        setSelectedCandidate({ ...selectedCandidate, status: "accepted" });
+      }
+    } catch (err) {
+      console.error("Failed executing cloud authorization status update:", err);
     }
   };
 
@@ -319,7 +326,7 @@ export default function ExperienceDrivenPortal() {
         </button>
       </header>
 
-      {/* Main Container Flow Engine */}
+      {/* Main Content Viewport */}
       <div className="w-full flex-grow z-10 block lg:flex lg:flex-col lg:overflow-hidden my-4 lg:my-0 pb-12 lg:pb-0">
         <AnimatePresence mode="wait">
           {!isAdminMode ? (
@@ -384,6 +391,7 @@ export default function ExperienceDrivenPortal() {
               exit={{ opacity: 0 }}
               className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start h-auto lg:h-full"
             >
+              {/* Left Column eval listings */}
               <div className="lg:col-span-4 flex flex-col justify-between p-5 bg-white border border-purple-100 rounded-[28px] shadow-sm min-h-[300px] lg:h-[calc(100vh-240px)] overflow-hidden w-full">
                 <div className="w-full">
                   <div className="flex items-center justify-between border-b border-purple-50 pb-4 mb-4">
@@ -429,6 +437,7 @@ export default function ExperienceDrivenPortal() {
                 </div>
               </div>
 
+              {/* Right Profile Breakdown Metrics Panel */}
               <div className="lg:col-span-8 bg-white p-5 md:p-6 lg:p-8 rounded-[28px] border border-purple-100 shadow-sm flex flex-col justify-between min-h-[380px] lg:h-[calc(100vh-240px)] overflow-y-auto mt-0">
                 {selectedCandidate ? (
                   <div className="flex flex-col h-full justify-between gap-6 w-full">
@@ -527,7 +536,7 @@ export default function ExperienceDrivenPortal() {
         )}
       </AnimatePresence>
 
-      {/* Slideout Panel */}
+      {/* Drawer Terminal Sheet Panel */}
       <AnimatePresence>
         {selectedJob && (
           <>
