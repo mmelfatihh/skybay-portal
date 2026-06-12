@@ -133,12 +133,24 @@ export default function ExperienceDrivenPortal() {
   const sliderRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
 
+  // 1. Safe window calculation & LocalStorage hydration check on mount
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 1024);
     };
     handleResize();
     window.addEventListener("resize", handleResize);
+
+    // Pull previously saved candidate sequences from browser storage memory
+    const cachedDossiers = localStorage.getItem("skybay_dossiers");
+    if (cachedDossiers) {
+      try {
+        setCandidates(JSON.parse(cachedDossiers));
+      } catch (e) {
+        console.error("Failed to parse cached database tracking nodes", e);
+      }
+    }
+
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
@@ -196,7 +208,12 @@ export default function ExperienceDrivenPortal() {
         status: "pending"
       };
 
-      setCandidates(prev => [newCandidate, ...prev]);
+      const updatedList = [newCandidate, ...candidates];
+      setCandidates(updatedList);
+      
+      // Save data string into browser LocalStorage immediately
+      localStorage.setItem("skybay_dossiers", JSON.stringify(updatedList));
+      
       setIsSubmitted(true);
     } catch (err) {
       console.error("Failed executing production route file sync:", err);
@@ -206,9 +223,12 @@ export default function ExperienceDrivenPortal() {
   };
 
   const handleAcceptCandidate = (id: string) => {
-    setCandidates(prev => prev.map(c => c.id === id ? { ...c, status: "accepted" } : c));
+    const updated = candidates.map(c => c.id === id ? { ...c, status: "accepted" as const } : c);
+    setCandidates(updated);
+    localStorage.setItem("skybay_dossiers", JSON.stringify(updated));
+    
     if (selectedCandidate && selectedCandidate.id === id) {
-      setSelectedCandidate(prev => prev ? { ...prev, status: "accepted" } : null);
+      setSelectedCandidate({ ...selectedCandidate, status: "accepted" });
     }
   };
 
@@ -266,10 +286,9 @@ export default function ExperienceDrivenPortal() {
   };
 
   return (
-    // UNCONSTRAINED document base. Completely avoids screen lockouts by stripping hard height limits on mobile viewports. Enforces overflow shields.
-    <div className="relative w-full max-w-full min-h-screen lg:h-screen lg:overflow-hidden bg-[#F6F5FA] text-[#1E1D24] overflow-x-hidden flex flex-col justify-between p-4 md:p-8">
+    <main className="relative w-full max-w-full min-h-screen lg:h-screen lg:overflow-hidden bg-[#F6F5FA] text-[#1E1D24] overflow-x-hidden flex flex-col p-4 md:p-8">
       
-      {/* Background Ambience Layer */}
+      {/* Background Ambience */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-10%] w-[300px] md:w-[65vw] h-[300px] md:h-[65vh] bg-gradient-to-br from-purple-400/20 via-fuchsia-300/30 to-transparent rounded-full blur-[100px] md:blur-[130px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[250px] md:w-[60vw] h-[250px] md:h-[60vh] bg-gradient-to-tr from-amber-200/30 via-purple-300/10 to-transparent rounded-full blur-[100px] md:blur-[120px]" />
@@ -300,7 +319,7 @@ export default function ExperienceDrivenPortal() {
         </button>
       </header>
 
-      {/* FIXED CONTAINER ENGINE: Completely separates mobile page flow from desktop window scaling */}
+      {/* Main Container Flow Engine */}
       <div className="w-full flex-grow z-10 block lg:flex lg:flex-col lg:overflow-hidden my-4 lg:my-0 pb-12 lg:pb-0">
         <AnimatePresence mode="wait">
           {!isAdminMode ? (
@@ -326,7 +345,6 @@ export default function ExperienceDrivenPortal() {
                 </p>
               </div>
 
-              {/* Fixed Independent Mobile Box Flow Array */}
               <div className="lg:col-span-8 space-y-4 w-full h-auto lg:h-[calc(100vh-240px)] lg:overflow-y-auto lg:pr-2 block">
                 {JOBS.map((job) => {
                   const IconComponent = job.icon;
@@ -366,7 +384,6 @@ export default function ExperienceDrivenPortal() {
               exit={{ opacity: 0 }}
               className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start h-auto lg:h-full"
             >
-              {/* Left Column Dossier nodes stream list */}
               <div className="lg:col-span-4 flex flex-col justify-between p-5 bg-white border border-purple-100 rounded-[28px] shadow-sm min-h-[300px] lg:h-[calc(100vh-240px)] overflow-hidden w-full">
                 <div className="w-full">
                   <div className="flex items-center justify-between border-b border-purple-50 pb-4 mb-4">
@@ -408,11 +425,10 @@ export default function ExperienceDrivenPortal() {
                   </div>
                 </div>
                 <div className="border-t border-purple-50 pt-4 mt-4 hidden lg:flex items-center justify-between text-[10px] font-mono text-purple-950/40">
-                  <span>AI METITE SUITE ACTIVE</span>
+                  <span>AI METRIC SUITE ACTIVE</span>
                 </div>
               </div>
 
-              {/* Right Profile Breakdown Metrics Panel */}
               <div className="lg:col-span-8 bg-white p-5 md:p-6 lg:p-8 rounded-[28px] border border-purple-100 shadow-sm flex flex-col justify-between min-h-[380px] lg:h-[calc(100vh-240px)] overflow-y-auto mt-0">
                 {selectedCandidate ? (
                   <div className="flex flex-col h-full justify-between gap-6 w-full">
@@ -612,6 +628,6 @@ export default function ExperienceDrivenPortal() {
           </>
         )}
       </AnimatePresence>
-    </div>
+    </main>
   );
 }
